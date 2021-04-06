@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<body>
+    <div id="tooltip" class="hidden">
+        <p><strong>This Professor is:</strong></p>
+        <p><span id="tooltip_value"></span></p>
+    </div>
+    <script src="d3.js"></script>
+    <script src="http://libs.baidu.com/jquery/2.0.0/jquery.js"></script>
+    <script type="text/javascript" src="coauthor.js"></script>
+    <script>
+
+        function search(nameKey, myArray) {
+            for (var i = 0; i < myArray.length; i++) {
+                if (myArray[i].id === nameKey) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        var nodes = [];
+        var links = [];
+
+        Mydata.nodes.forEach(function (d) {
+            if (d.dept === 'CSE') { nodes.push(d) };
+        });
+
+        Mydata.edges.forEach(function (d) {
+            if (typeof d.source == "number") { d.source = search(d.source, nodes); }
+            if (typeof d.target == "number") { d.target = search(d.target, nodes); }
+            if (d.source !== -1 && d.target !== -1 && typeof d.source == "number" && typeof d.target == "number") { links.push(d); }
+        });
+
+        console.log(nodes);
+        console.log(links);
+
+        var width = 960, height = 500;
+
+        var force = d3.layout.force()
+            .size([width, height]);
+
+        var color = d3.scale.category20c();
+
+        var svg = d3.select("body").append("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        //加载数据，启动力布局
+        force.nodes(nodes)
+            .links(links)
+            .start();
+
+        //绘制连接线
+        var link = svg.selectAll(".link")
+            .data(links)
+            .enter().append("line")
+            .attr("stroke", "#ccc");
+
+        //绘制节点
+        var node = svg.selectAll(".node")
+            .data(nodes)
+            .enter().append("circle")
+            .attr("fill", function (d, i) { return color(i); })
+            .attr("r", 5)
+            .attr("stroke", "black")
+            .attr("stroke-width", 1)
+            .on("mouseover", function (d) {
+      
+                console.log(d);
+                d3.select(this)
+                    .transition(300)
+                    .attr("fill", "white");
+                //更新提示条位置和值
+                d3.select("#tooltip")
+                    .select("#tooltip_value")
+                    .text(d.fullname);
+                //显示提示条
+                d3.select("#tooltip").classed("hidden", false);
+            })
+            .on("mouseout", function (d, i) {
+                //隐藏提示条
+                d3.select("#tooltip").classed("hidden", true);
+                d3.select(this)
+                    .attr("fill", color(i));
+            });
+
+        //按照力布局的节拍移动线和点的位置，直到收敛
+        force.on("tick", function () {
+            link.attr("x1", function (d) { return d.source.x; })
+                .attr("y1", function (d) { return d.source.y; })
+                .attr("x2", function (d) { return d.target.x; })
+                .attr("y2", function (d) { return d.target.y; });
+
+            node.attr("cx", function (d) { return d.x; })
+                .attr("cy", function (d) { return d.y; });
+        });
+
+        var margin = { top: 100, right: 100, bottom: 100, left: 100 },
+            width = 1000,
+            height = 1000;
+
+        var svg = d3.select("body").append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .style("margin-left", -margin.left + "px")
+            .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+        svg.append("rect")
+            .attr("class", "background")
+            .attr("width", width)
+            .attr("height", height);
+
+        var numrows = nodes.length;
+        var numcols = nodes.length;
+
+        var matrix = new Array(numrows);
+        for (var i = 0; i < numrows; i++) {
+            matrix[i] = new Array(numcols);
+            for (var j = 0; j < numcols; j++) {
+                matrix[i][j] = 0;
+            }
+        }
+
+        links.forEach(function (d) {
+            console.log("testing");
+            console.log(d);
+            var i = search(d.source.id, nodes);
+            var j = search(d.target.id, nodes);
+            if (d.publications.length > 0) {
+                matrix[i][j] += d.publications.length;
+                matrix[j][i] += d.publications.length;
+            }
+        });
+
+        var x = d3.scale.ordinal()
+            .domain(d3.range(numcols))
+            .rangeBands([0, width]);
+
+        var y = d3.scale.ordinal()
+            .domain(d3.range(numrows))
+            .rangeBands([0, height]);
+
+        var rowLabels = new Array(numrows);
+        for (var i = 0; i < numrows; i++) {
+            rowLabels[i] = nodes[i].fullname;
+        }
+
+        var columnLabels = new Array(numrows);
+        for (var i = 0; i < numcols; i++) {
+            columnLabels[i] = nodes[i].fullname;
+        }
+
+        var colorMap = d3.scale.linear()
+            .domain([-1, 0, 1])
+            .range(["red", "white", "blue"]);
+
+        var row = svg.selectAll(".row")
+            .data(matrix)
+            .enter().append("g")
+            .attr("class", "row")
+            .attr("transform", function (d, i) { return "translate(0," + y(i) + ")"; });
+
+        row.selectAll(".cell")
+            .data(function (d) { return d; })
+            .enter().append("rect")
+            .attr("class", "cell")
+            .attr("x", function (d, i) { return x(i); })
+            .attr("width", x.rangeBand())
+            .attr("height", y.rangeBand())
+            .style("stroke-width", 0);
+
+        row.append("line")
+            .attr("x2", width);
+
+        row.append("text")
+            .attr("x", 0)
+            .attr("y", y.rangeBand() / 2)
+            .attr("dy", ".32em")
+            .attr("text-anchor", "end")
+            .text(function (d, i) { return i; });
+
+        var column = svg.selectAll(".column")
+            .data(columnLabels)
+            .enter().append("g")
+            .attr("class", "column")
+            .attr("transform", function (d, i) { return "translate(" + x(i) + ")rotate(-90)"; });
+
+        column.append("line")
+            .attr("x1", -width);
+
+        column.append("text")
+            .attr("x", 6)
+            .attr("y", y.rangeBand() / 2)
+            .attr("dy", ".32em")
+            .attr("text-anchor", "start")
+            .text(function (d, i) { return d; });
+
+        row.selectAll(".cell")
+            .data(function (d, i) { return matrix[i]; })
+            .style("fill", colorMap)
+            .on("mouseover", function (d) {
+                console.log(d);
+                console.log(this);
+                d3.select(this)
+                    .attr("width", x.rangeBand() * 1.1)
+                    .attr("height", y.rangeBand() * 1.1)
+            });
+
+    </script>
